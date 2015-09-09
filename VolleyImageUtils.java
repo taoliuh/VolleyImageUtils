@@ -1,44 +1,47 @@
-package com.zuzhili.framework.utils;
-
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.widget.ImageView;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
+import android.net.Uri;
+import android.util.Log;
 
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.ImageLoader;
-import com.lidroid.xutils.util.LogUtils;
-
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
- * Created by liutao on 14-3-18.
+ * Created by liutao on 1/16/15.
  */
-public class VolleyImageUtils {
+public class ImageUtils {
 
+    public static final String TAG = ImageUtils.class.getSimpleName();
     /**
-     * 获取缩放的bitmap
-     * @param filePath
-     * @param maxWidth
-     * @param maxHeight
-     * @return
+     * get scaled bitmap
+     * @param filePath  local file path
+     * @param maxWidth  scaled bitmap width you desired, if maxWidth < maxHeight, then scaled
+     *                  bitmap width is maxWidth while bitmap height is maxWidth * ratio
+     * @param maxHeight scaled bitmap height you desired, if maxHeight < maxWidth, then scaled
+     *                  bitmap height is maxHeight while bitmap width is maxHeight / ratio.
+     * @return scaled bitmap
      */
     public static Bitmap getScaledBitmap(String filePath, int maxWidth, int maxHeight) {
         BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
-        Bitmap bitmap = null;
+        Bitmap bitmap;
         // If we have to resize this image, first get the natural bounds.
         decodeOptions.inJustDecodeBounds = true;
         BitmapFactory.decodeFile(filePath, decodeOptions);
         int actualWidth = decodeOptions.outWidth;
         int actualHeight = decodeOptions.outHeight;
-
+        Log.d(TAG, "Actual width: " + actualWidth + ", actual height: " + actualHeight);
         // Then compute the dimensions we would ideally like to decode to.
         int desiredWidth = getResizedDimension(maxWidth, maxHeight,
                 actualWidth, actualHeight);
         int desiredHeight = getResizedDimension(maxHeight, maxWidth,
                 actualHeight, actualWidth);
+        Log.d(TAG, "Desired width: " + desiredWidth + ", desired height: " + desiredHeight);
 
         // Decode to the nearest power of two scaling factor.
         decodeOptions.inJustDecodeBounds = false;
@@ -60,53 +63,13 @@ public class VolleyImageUtils {
     }
 
     /**
-     * 获取缩放的bitmap
-     * @param file
-     * @param maxWidth
-     * @param maxHeight
-     * @return
-     */
-    public static Bitmap getScaledBitmap(File file, int maxWidth, int maxHeight) {
-        BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
-        Bitmap bitmap = null;
-        // If we have to resize this image, first get the natural bounds.
-        decodeOptions.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(file.getAbsolutePath(), decodeOptions);
-        int actualWidth = decodeOptions.outWidth;
-        int actualHeight = decodeOptions.outHeight;
-
-        // Then compute the dimensions we would ideally like to decode to.
-        int desiredWidth = getResizedDimension(maxWidth, maxHeight,
-                actualWidth, actualHeight);
-        int desiredHeight = getResizedDimension(maxHeight, maxWidth,
-                actualHeight, actualWidth);
-
-        // Decode to the nearest power of two scaling factor.
-        decodeOptions.inJustDecodeBounds = false;
-        // TODO(ficus): Do we need this or is it okay since API 8 doesn't support it?
-        // decodeOptions.inPreferQualityOverSpeed = PREFER_QUALITY_OVER_SPEED;
-        decodeOptions.inSampleSize =
-                findBestSampleSize(actualWidth, actualHeight, desiredWidth, desiredHeight);
-        Bitmap tempBitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), decodeOptions);
-        // If necessary, scale down to the maximal acceptable size.
-        if (tempBitmap != null && (tempBitmap.getWidth() > desiredWidth ||
-                tempBitmap.getHeight() > desiredHeight)) {
-            bitmap = Bitmap.createScaledBitmap(tempBitmap,
-                    desiredWidth, desiredHeight, true);
-            tempBitmap.recycle();
-        } else {
-            bitmap = tempBitmap;
-        }
-        return bitmap;
-    }
-
-    /**
-     * 获取缩放的bitmap
-     * @param context
-     * @param imageResId
-     * @param maxWidth
-     * @param maxHeight
-     * @return
+     * get scaled bitmap
+     * @param imageResId image resource id
+     * @param maxWidth  scaled bitmap width you desired, if maxWidth < maxHeight, then scaled
+     *                  bitmap width is maxWidth while bitmap height is maxWidth * ratio
+     * @param maxHeight scaled bitmap height you desired, if maxHeight < maxWidth, then scaled
+     *                  bitmap height is maxHeight while bitmap width is maxHeight / ratio.
+     * @return scaled bitmap
      */
     public static Bitmap getScaledBitmap(Context context, int imageResId, int maxWidth, int maxHeight) {
         BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
@@ -116,12 +79,14 @@ public class VolleyImageUtils {
         BitmapFactory.decodeResource(context.getResources(), imageResId, decodeOptions);
         int actualWidth = decodeOptions.outWidth;
         int actualHeight = decodeOptions.outHeight;
+        Log.d(TAG, "Actual width: " + actualWidth + ", actual height: " + actualHeight);
 
         // Then compute the dimensions we would ideally like to decode to.
         int desiredWidth = getResizedDimension(maxWidth, maxHeight,
                 actualWidth, actualHeight);
         int desiredHeight = getResizedDimension(maxHeight, maxWidth,
                 actualHeight, actualWidth);
+        Log.d(TAG, "Desired width: " + desiredWidth + ", desired height: " + desiredHeight);
 
         // Decode to the nearest power of two scaling factor.
         decodeOptions.inJustDecodeBounds = false;
@@ -152,7 +117,7 @@ public class VolleyImageUtils {
      * @param desiredHeight Desired height of the bitmap
      */
     // Visible for testing.
-    public static int findBestSampleSize(
+    private static int findBestSampleSize(
             int actualWidth, int actualHeight, int desiredWidth, int desiredHeight) {
         double wr = (double) actualWidth / desiredWidth;
         double hr = (double) actualHeight / desiredHeight;
@@ -176,8 +141,8 @@ public class VolleyImageUtils {
      * @param actualPrimary Actual size of the primary dimension
      * @param actualSecondary Actual size of the secondary dimension
      */
-    public static int getResizedDimension(int maxPrimary, int maxSecondary, int actualPrimary,
-                                    int actualSecondary) {
+    private static int getResizedDimension(int maxPrimary, int maxSecondary, int actualPrimary,
+                                          int actualSecondary) {
         // If no dominant value at all, just return the actual.
         if (maxPrimary == 0 && maxSecondary == 0) {
             return actualPrimary;
@@ -202,8 +167,8 @@ public class VolleyImageUtils {
     }
 
     /**
-     * 获取图片实际尺寸
-     * @param imagePath
+     * get actual image dimension
+     * @param imagePath local file path
      * @return
      */
     public static int[] getActualImageDimension(String imagePath) {
@@ -220,8 +185,8 @@ public class VolleyImageUtils {
     }
 
     /**
-     * 获取图片实际尺寸
-     * @param imageResId
+     * get actual image dimension
+     * @param imageResId image resource id
      * @return
      */
     public static int[] getActualImageDimension(Context context, int imageResId) {
@@ -237,17 +202,10 @@ public class VolleyImageUtils {
         return imageSize;
     }
 
-    /**
-     * 根据显示的最大宽度或最大高度，保持原图的宽高比缩放
-     * @param imagePath 图片路径
-     * @param maxWidth  图片显示的最大宽度
-     * @param maxHeight 图片显示的最大高度
-     * @return
-     */
-    public static int[] getDesiredImageDimension(String imagePath, int maxWidth, int maxHeight) {
+    private static int[] getDesiredImageDimension(String imagePath, int maxWidth, int maxHeight) {
         int[] desiredImageDimension = new int[2];
         int[] actualImageDimension = getActualImageDimension(imagePath);
-        LogUtils.e("actual width: " + actualImageDimension[0] + ", actual height: " + actualImageDimension[1]);
+        Log.d(TAG, "Actual width: " + actualImageDimension[0] + ", actual height: " + actualImageDimension[1]);
         int maxPrimary;
         int maxSecondary;
         if (actualImageDimension[0] >= actualImageDimension[1]) {
@@ -261,21 +219,14 @@ public class VolleyImageUtils {
             desiredImageDimension[1] = getResizedDimension(maxPrimary, maxSecondary, actualImageDimension[1], actualImageDimension[0]);
             desiredImageDimension[0] = getResizedDimension(maxPrimary, maxSecondary, actualImageDimension[0], actualImageDimension[1]);
         }
-        LogUtils.e("desired width: " + desiredImageDimension[0] + ", desired height: " + desiredImageDimension[1]);
+        Log.d(TAG, "Desired width: " + desiredImageDimension[0] + ", desired height: " + desiredImageDimension[1]);
         return desiredImageDimension;
     }
 
-    /**
-     * 根据显示的最大宽度或最大高度，保持原图的宽高比缩放
-     * @param imageResId 图片资源id
-     * @param maxWidth  图片显示的最大宽度
-     * @param maxHeight 图片显示的最大高度
-     * @return
-     */
-    public static int[] getDesiredImageDimension(Context context, int imageResId, int maxWidth, int maxHeight) {
+    private static int[] getDesiredImageDimension(Context context, int imageResId, int maxWidth, int maxHeight) {
         int[] desiredImageDimension = new int[2];
         int[] actualImageDimension = getActualImageDimension(context, imageResId);
-        LogUtils.e("actual width: " + actualImageDimension[0] + ", actual height: " + actualImageDimension[1]);
+        Log.d(TAG, "Actual width: " + actualImageDimension[0] + ", actual height: " + actualImageDimension[1]);
         int maxPrimary;
         int maxSecondary;
         if (actualImageDimension[0] >= actualImageDimension[1]) {
@@ -289,52 +240,161 @@ public class VolleyImageUtils {
             desiredImageDimension[1] = getResizedDimension(maxPrimary, maxSecondary, actualImageDimension[1], actualImageDimension[0]);
             desiredImageDimension[0] = getResizedDimension(maxPrimary, maxSecondary, actualImageDimension[0], actualImageDimension[1]);
         }
-        LogUtils.e("desired width: " + desiredImageDimension[0] + ", desired height: " + desiredImageDimension[1]);
+        Log.d(TAG, "Desired width: " + desiredImageDimension[0] + ", desired height: " + desiredImageDimension[1]);
         return desiredImageDimension;
     }
 
     /**
-     * The custom implementation of ImageListener which handles basic functionality
-     * of showing a default image until the network response is received, at which point
-     * it will switch to either the actual image or the error image.
-     * @param view The imageView that the listener is associated with.
-     * @param defaultImageResId Default image resource ID to use, or 0 if it doesn't exist.
-     * @param errorImageResId Error image resource ID to use, or 0 if it doesn't exist.
+     * compress the image file, create a scaled compressed image file, and overwrite the origin one.
+     * @param path  origin image file path
+     * @param maxWidth
+     * @param maxHeight
+     * @param quality
      */
-    public static ImageLoader.ImageListener getImageListener(final Context context, final ImageView view,
-                                                 final int defaultImageResId, final int errorImageResId, int maxWidth, int maxHeight) {
-        final int[] desiredImageDimension = VolleyImageUtils.getDesiredImageDimension(context, defaultImageResId, maxWidth, maxHeight);
-        return new ImageLoader.ImageListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                if (errorImageResId != 0) {
-                    view.setImageBitmap(getScaledBitmap(context, errorImageResId, desiredImageDimension[0], desiredImageDimension[1]));
-                }
-            }
-
-            @Override
-            public void onResponse(ImageLoader.ImageContainer response, boolean isImmediate) {
-                if (response.getBitmap() != null) {
-                    view.setImageBitmap(response.getBitmap());
-                } else if (defaultImageResId != 0) {
-                    view.setImageBitmap(getScaledBitmap(context, defaultImageResId, desiredImageDimension[0], desiredImageDimension[1]));
-                }
-            }
-        };
-    }
-
-    public static void compress(File file, int maxWidth, int maxHeight) {
-        FileOutputStream out = null;
+    public static void compress(String path, int maxWidth, int maxHeight, int quality) {
+        FileOutputStream out;
         try {
-            Bitmap scaledBitmap = getScaledBitmap(file, maxWidth, maxHeight);
-            out = new FileOutputStream(file.getAbsolutePath());
+            Bitmap scaledBitmap = getScaledBitmap(path, maxWidth, maxHeight);
+            Bitmap rotatedBitmap = rotateBitmap(getBitmapDegree(path), scaledBitmap);
+            out = new FileOutputStream(path);
+            Bitmap mutableBitmap = rotatedBitmap.copy(Bitmap.Config.ARGB_8888, true);
 
-//          write the compressed bitmap at the destination specified by filename.
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
-
+            // write the compressed bitmap at the destination specified by filename.
+            mutableBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
     }
 
+    /**
+     * add water mark at the left top of image.
+     * @param context
+     * @param srcPath   local image file path
+     * @param watermarkRes  watermark resource
+     * @param maxWidth scaled bitmap width you desired, if maxWidth < maxHeight, then scaled
+     *                  bitmap width is maxWidth while bitmap height is maxWidth * ratio
+     * @param maxHeight scaled bitmap height you desired, if maxHeight < maxWidth, then scaled
+     *                  bitmap height is maxHeight while bitmap width is maxHeight / ratio.
+     * @param quality compress quality
+     */
+    // http://developer.android.com/training/displaying-bitmaps/load-bitmap.html
+    public static void watermark(Context context, String srcPath, int watermarkRes, int maxWidth, int maxHeight, int quality) {
+
+        FileOutputStream out;
+        try {
+            Bitmap scaledBitmap = getScaledBitmap(srcPath, maxWidth, maxHeight);
+            Bitmap rotatedBitmap = rotateBitmap(getBitmapDegree(srcPath), scaledBitmap);
+            Bitmap scaledWatermark = getScaledBitmap(context, watermarkRes, maxWidth, maxHeight);
+            out = new FileOutputStream(srcPath);
+
+            Bitmap mutableBitmap = rotatedBitmap.copy(Bitmap.Config.ARGB_8888, true);
+            Canvas canvas = new Canvas(mutableBitmap);
+            canvas.drawBitmap(scaledWatermark, 0, 0, null);
+
+            // write the compressed bitmap at the destination specified by filename.
+            mutableBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (OutOfMemoryError e) {
+            Log.e(TAG, "Add watermark result in OOM");
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * add watermark at the right bottom of the image
+     * @param context
+     * @param srcPath   local image file path
+     * @param watermarkRes  watermark resource
+     * @param maxWidth scaled bitmap width you desired, if maxWidth < maxHeight, then scaled
+     *                  bitmap width is maxWidth while bitmap height is maxWidth * ratio
+     * @param maxHeight scaled bitmap height you desired, if maxHeight < maxWidth, then scaled
+     *                  bitmap height is maxHeight while bitmap width is maxHeight / ratio.
+     * @param quality compress quality
+     */
+    public static void watermarkAtRightBottom(Context context, String srcPath, int watermarkRes, int maxWidth, int maxHeight, int quality) {
+
+        FileOutputStream out;
+        try {
+            Bitmap scaledBitmap = getScaledBitmap(srcPath, maxWidth, maxHeight);
+            Bitmap rotatedBitmap = rotateBitmap(getBitmapDegree(srcPath), scaledBitmap);
+            Bitmap scaledWatermark = getScaledBitmap(context, watermarkRes, maxWidth, maxHeight);
+            out = new FileOutputStream(srcPath);
+
+            int left = rotatedBitmap.getWidth() - scaledWatermark.getWidth();
+            int top = rotatedBitmap.getHeight() - scaledWatermark.getHeight();
+
+            Bitmap mutableBitmap = rotatedBitmap.copy(Bitmap.Config.ARGB_8888, true);
+            Canvas canvas = new Canvas(mutableBitmap);
+            canvas.drawBitmap(scaledWatermark, left, top, null);
+
+            // write the compressed bitmap at the destination specified by filename.
+            mutableBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (OutOfMemoryError e) {
+            Log.e(TAG, "Add watermark result in OOM");
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * get bitmap degree, you may get an rotated photo when you take a picture in some devices.
+     * @param path local image file path
+     * @return
+     */
+    public static int getBitmapDegree(String path) {
+        int degree  = 0;
+        try {
+            ExifInterface exifInterface = new ExifInterface(path);
+            int orientation = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            switch (orientation) {
+                case ExifInterface.ORIENTATION_ROTATE_90:
+                    degree = 90;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_180:
+                    degree = 180;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_270:
+                    degree = 270;
+                    break;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return degree;
+    }
+
+    /**
+     * rotate bitmap
+     * @param angle rotate angle
+     * @param bitmap origin bitmap
+     * @return rotated bitmap
+     */
+    public static Bitmap rotateBitmap(int angle, Bitmap bitmap) {
+        Matrix matrix = new Matrix();
+        matrix.postRotate(angle);
+        return Bitmap.createBitmap(bitmap, 0, 0,
+                bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+    }
+
+    /**
+     * create a copied image.
+     * @param context
+     * @param photoUri origin image uri
+     * @param outputPath   output image uri.
+     * @return true if successfully compressed to the specified stream.
+     * @throws IOException
+     */
+    public static boolean copyBitmapFile(Context context, Uri photoUri, String outputPath) throws IOException {
+        // Load image from path
+        InputStream input = context.getContentResolver().openInputStream(photoUri);
+
+        // compress it
+        Bitmap bitmapOrigin = BitmapFactory.decodeStream(input);
+        if (bitmapOrigin == null) return false;
+        // save to file
+        FileOutputStream output = new FileOutputStream(outputPath);
+        return bitmapOrigin.compress(Bitmap.CompressFormat.JPEG, 100, output);
+    }
 }
