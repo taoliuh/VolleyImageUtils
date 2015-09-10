@@ -273,7 +273,7 @@ public class ImageUtils {
      * @param maxHeight
      * @param quality
      */
-    public static void compress(String originPath, String outputPath int maxWidth, int maxHeight, int quality) {
+    public static void compress(String originPath, String outputPath, int maxWidth, int maxHeight, int quality) {
         FileOutputStream out;
         try {
             Bitmap scaledBitmap = getScaledBitmap(originPath, maxWidth, maxHeight);
