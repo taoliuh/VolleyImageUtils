@@ -265,6 +265,28 @@ public class ImageUtils {
             e.printStackTrace();
         }
     }
+    
+    /**
+     * compress the image file, create a scaled compressed image file, and overwrite the origin one.
+     * @param path  origin image file path
+     * @param maxWidth
+     * @param maxHeight
+     * @param quality
+     */
+    public static void compress(String originPath, String outputPath int maxWidth, int maxHeight, int quality) {
+        FileOutputStream out;
+        try {
+            Bitmap scaledBitmap = getScaledBitmap(originPath, maxWidth, maxHeight);
+            Bitmap rotatedBitmap = rotateBitmap(getBitmapDegree(originPath), scaledBitmap);
+            out = new FileOutputStream(outputPath);
+            Bitmap mutableBitmap = rotatedBitmap.copy(Bitmap.Config.ARGB_8888, true);
+
+            // write the compressed bitmap at the destination specified by filename.
+            mutableBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
 
     /**
      * add water mark at the left top of image.
